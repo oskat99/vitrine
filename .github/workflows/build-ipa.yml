@@ -41,9 +41,18 @@ jobs:
 
       - name: Download IPA
         run: |
+          set -euo pipefail
           mkdir -p ipa
           curl -fsSL "${{ inputs.ipa_url }}" -o ipa/spotify.ipa
-          case "$(file --mime-type -b ipa/spotify.ipa)" in application/zip|application/x-ios-app) ;; *) echo "::error::Not an IPA"; exit 1 ;; esac
+          echo "Downloaded file:"
+          ls -lh ipa/spotify.ipa
+          echo "Checking IPA archive..."
+          unzip -tq ipa/spotify.ipa
+          unzip -Z1 ipa/spotify.ipa | grep -Eq '^Payload/[^/]+\.app/Info\.plist$' || {
+            echo "::error::Downloaded archive does not contain Payload/<App>.app/Info.plist"
+            exit 1
+          }
+          echo "IPA archive and app Info.plist verified."
 
       - run: make release
 
