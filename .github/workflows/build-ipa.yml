@@ -1,6 +1,9 @@
 name: Build IPA from your own Spotify IPA
 
 on:
+  push:
+    branches:
+      - feature/taurus-liquid-glass-icons
   workflow_dispatch:
     inputs:
       ipa_url:
@@ -18,7 +21,7 @@ env:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v5
 
@@ -43,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ipa
-          curl -fsSL "${{ inputs.ipa_url }}" -o ipa/spotify.ipa
+          curl -fsSL "${{ inputs.ipa_url || 'https://github.com/oskat99/vitrine/releases/download/ipa-test/com.spotify.client-9.1.90-Decrypted.ipa' }}" -o ipa/spotify.ipa
           echo "Downloaded file:"
           ls -lh ipa/spotify.ipa
           echo "Checking IPA archive..."
@@ -57,14 +60,14 @@ jobs:
       - run: make release
 
       - uses: actions/upload-artifact@v5
-        if: inputs.upload_method != 'filebin'
+        if: (inputs.upload_method || 'artifacts') != 'filebin'
         with:
           name: vitrine.ipa
           path: out/*.ipa
           if-no-files-found: error
 
       - name: Upload to filebin.net
-        if: inputs.upload_method != 'artifacts'
+        if: (inputs.upload_method || 'artifacts') != 'artifacts'
         run: |
           BIN="vitrine-${{ github.run_id }}"
           echo "### filebin.net download" >> "$GITHUB_STEP_SUMMARY"
