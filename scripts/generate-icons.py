@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Generate clean, flat Vitrine Spotify icons from the user's extracted icon.
+"""Generate flat circular Spotify-mark icons from the user's extracted source.
 
-The extracted source is a glossy 3-D app icon, not a two-colour flat logo.
-Only the dark Spotify wave mark inside the central green disc is retained.
-The surrounding disc, glow, shadows, rim and outer background are discarded.
+The source is a glossy green disc with dark Spotify wave cutouts on a dark
+background. Rebuild the mark as a clean flat circle: the circle is the chosen
+foreground colour, and the three wave cutouts are the chosen background colour.
 """
 from pathlib import Path
 import numpy as np
@@ -30,30 +30,36 @@ if image.size != (1024, 1024):
     raise SystemExit(f"Expected 1024x1024 source, got {image.size}")
 
 pixels = np.asarray(image, dtype=np.float32)
+yy, xx = np.mgrid[:1024, :1024]
+radius = np.sqrt((xx - 512.0) ** 2 + (yy - 512.0) ** 2)
 
-# The Spotify waves sit in the centre of the green disc. Restrict extraction
-# to that region so the disc's dark rim, outer background and glossy effects
-# can never be mistaken for parts of the mark.
-yy, xx = np.ogrid[:1024, :1024]
-inside_mark_area = (xx - 512) ** 2 + (yy - 512) ** 2 <= 350 ** 2
+# Recreate the central disc as a clean circle, excluding the source's bevel,
+# glow and outer shadow. A soft one-pixel edge retains smooth antialiasing.
+circle_radius = 410.0
+circle = np.clip(circle_radius + 0.5 - radius, 0.0, 1.0)
 
-# The mark itself is near-black; the disc behind it is bright green.
-# Convert darkness to coverage so the original antialiased edges survive,
-# while faint green glow/shading is rejected instead of becoming a halo.
+# The three wave cutouts are near-black. Detect them only in the central
+# Spotify-mark area; this avoids mistaking the dark outer background or disc
+# rim for holes. Luma interpolation preserves their antialiased edges.
 luma = pixels @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
-low, high = 25.0, 95.0
-coverage = np.clip((high - luma) / (high - low), 0.0, 1.0)
-coverage *= inside_mark_area.astype(np.float32)
+wave_area = ((radius < 315.0) &
+             (yy > 285) & (yy < 750))
+wave_holes = np.clip((105.0 - luma) / 65.0, 0.0, 1.0)
+wave_holes *= wave_area.astype(np.float32)
+
+# Circle is the coloured mark; the wave strokes are transparent cutouts
+# showing the flat background colour through them.
+coverage = circle * (1.0 - wave_holes)
 coverage = coverage[..., None]
 
-if float(coverage.max()) < 0.9 or float((coverage > 0.5).sum()) < 1000:
-    raise SystemExit("Could not reliably isolate the Spotify wave mark from the source icon")
+if float(coverage.max()) < 0.99 or float((wave_holes > 0.8).sum()) < 1000:
+    raise SystemExit("Could not reliably identify the circular Spotify mark and wave cutouts")
 
 OUT.mkdir(parents=True, exist_ok=True)
-for name, (background_hex, foreground_hex) in COLORS.items():
-    bg, fg = rgb(background_hex), rgb(foreground_hex)
+for name, (background_hex, mark_hex) in COLORS.items():
+    bg, mark = rgb(background_hex), rgb(mark_hex)
     result = np.rint(bg[None, None, :] * (1.0 - coverage) +
-                     fg[None, None, :] * coverage).clip(0, 255).astype(np.uint8)
+                     mark[None, None, :] * coverage).clip(0, 255).astype(np.uint8)
     Image.fromarray(result, "RGB").save(OUT / f"{name}.png", optimize=True)
 
-print("Generated clean flat icons:", ", ".join(f"{name}.png" for name in COLORS))
+print("Generated flat circular Spotify icons:", ", ".join(f"{name}.png" for name in COLORS))
