@@ -184,6 +184,8 @@ if [ ${#EXT_BINS[@]} -gt 0 ]; then
 fi
 rm -rf "$PATCH"
 
+python3 "$ROOT/scripts/generate-icons.py"
+
 shopt -s nullglob
 ICONS=("$ROOT"/icons/*.png)
 shopt -u nullglob
